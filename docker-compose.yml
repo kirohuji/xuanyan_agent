@@ -1,0 +1,62 @@
+# llama.cpp server — 口语练习评分 LLM
+# 启动：docker compose up -d
+#
+# API: http://<host>:2620/v1/chat/completions  （兼容 OpenAI）
+#
+# .env 可选：
+#   LLAMA_API_KEY         API 鉴权 Bearer token
+#   LLAMA_THREADS         线程数 (默认 16)
+#   LLAMA_CONTEXT         上下文长度 (默认 4096)
+#   LLAMA_PARALLEL        并行槽位数 (默认 1)
+
+services:
+  web:
+    build:
+      context: ./web
+    container_name: dd-web
+    ports:
+      - "0.0.0.0:80:3000"
+    env_file:
+      - ./web/.env
+    environment:
+      - LLAMA_BASE_URL=http://llama:8080/v1
+      - LLAMA_API_KEY=${LLAMA_API_KEY:-llama_8f3b0c9a4e2d7f1c6a9b2e8d0f4c1a7b9e3d5f6a8c2b1d0e4f7a9c3b6d8e1f2a}
+    restart: unless-stopped
+    depends_on:
+      - llama
+
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: llama
+    volumes:
+      - ./models:/models
+    ports:
+      - "0.0.0.0:2620:8080"
+    restart: unless-stopped
+    entrypoint: ["/app/llama-server"]
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -m
+      - /models/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      - --alias
+      - qwen2.5-7b
+      - -t
+      - "${LLAMA_THREADS:-16}"
+      - -c
+      - "${LLAMA_CONTEXT:-4096}"
+      - -fa
+      - "on"
+      - -ctk
+      - q8_0
+      - -ctv
+      - q8_0
+      - -np
+      - "${LLAMA_PARALLEL:-1}"
+      - --api-key
+      - "${LLAMA_API_KEY:-llama_8f3b0c9a4e2d7f1c6a9b2e8d0f4c1a7b9e3d5f6a8c2b1d0e4f7a9c3b6d8e1f2a}"
+      - --embeddings
+      - --slots
+      - --metrics

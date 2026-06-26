@@ -1,0 +1,117 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.99 0.002 286);
+  --foreground: oklch(0.12 0.02 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0.02 265);
+  --primary: oklch(0.35 0.08 265);
+  --primary-foreground: oklch(0.99 0 0);
+  --muted: oklch(0.96 0.004 286);
+  --muted-foreground: oklch(0.52 0.015 286);
+  --border: oklch(0.91 0.006 286);
+  --sidebar-background: oklch(0.99 0.002 286);
+  --sidebar-foreground: oklch(0.52 0.015 286);
+  --accent: oklch(0.55 0.15 250);
+  --accent-foreground: oklch(0.99 0 0);
+}
+
+.dark {
+  --background: oklch(0.12 0.02 265);
+  --foreground: oklch(0.96 0.004 286);
+  --card: oklch(0.16 0.025 265);
+  --card-foreground: oklch(0.96 0.004 286);
+  --primary: oklch(0.65 0.12 250);
+  --primary-foreground: oklch(0.12 0.02 265);
+  --muted: oklch(0.2 0.015 270);
+  --muted-foreground: oklch(0.65 0.01 270);
+  --border: oklch(0.28 0.015 270);
+  --sidebar-background: oklch(0.14 0.02 265);
+  --sidebar-foreground: oklch(0.65 0.01 270);
+  --accent: oklch(0.55 0.15 250);
+  --accent-foreground: oklch(0.99 0 0);
+}
+
+* { border-color: var(--border); }
+body { background: var(--background); color: var(--foreground); font-family: system-ui, -apple-system, sans-serif; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted-foreground); border-radius: 2px; }
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes zoom-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-zoom-in {
+  animation: zoom-in 0.2s ease-out;
+}
+
+/* details/summary 手风琴样式 */
+details.accordion {
+  margin: 0.75rem 0;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+details.accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+details.accordion summary::-webkit-details-marker { display: none; }
+details.accordion summary::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: var(--muted-foreground);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") center/contain no-repeat;
+  transition: transform 0.2s;
+}
+details.accordion[open] summary::after { transform: rotate(180deg); }
+details.accordion > div, details.accordion > p, details.accordion > :not(summary) {
+  padding: 0 0.875rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}

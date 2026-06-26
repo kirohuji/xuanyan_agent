@@ -1,0 +1,4 @@
+./models
+web/node_modules/
+web/.next/
+web/out/
