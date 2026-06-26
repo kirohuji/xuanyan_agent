@@ -160,7 +160,7 @@ export function Message({ role, content, isStreaming }: MessageProps) {
       ) : (
         <div className="w-full max-w-2xl prose prose-sm dark:prose-invert">
           {content ? (
-            <MarkdownContent content={content} />
+            <MarkdownContent content={content} renderSpecial={!isStreaming} />
           ) : isStreaming ? (
             <div className="flex items-center gap-2.5 py-2">
               <span className="text-sm text-muted-foreground/50">思考中</span>
@@ -245,10 +245,14 @@ function DDImage({ src, alt }: { src: string; alt: string }) {
 // ============================================
 // Markdown 渲染
 // ============================================
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({ content, renderSpecial = true }: { content: string; renderSpecial?: boolean }) {
   // 修复：确保 # ## ### 标题前有换行，否则 markdown 不识别
   const fixed = content.replace(/([^\n])(#{1,6}\s)/g, "$1\n\n$2");
   const renderCode = (lang: string | undefined, code: string) => {
+    // 流式输出时，图表/mermaid 以普通代码块展示，避免不完整JSON反复挂载导致闪烁
+    if (!renderSpecial) {
+      return <CodeBlock language={lang || ""} code={code} />;
+    }
     if (lang === "mermaid") return <Mermaid code={code} />;
     if (["chart-bar", "chart-pie", "chart-radar", "chart-line"].includes(lang || "")) {
       return <ChartBlock data={code} type={(lang || "").replace("chart-", "")} />;

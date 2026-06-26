@@ -84,48 +84,53 @@ async function callNonStream(cfg: ModelConfig, opts: ChatCallOptions): Promise<{
     max_tokens: opts.max_tokens,
   };
 
-  // DeepSeek Pro V4 Flash 不支持 tools 参数时降级
-  if (cfg.provider === "local") {
-    body.tools = tools;
-  } else {
-    // DeepSeek 也支持 tool_choice / tools，但如果报错则 fallback
-    body.tools = tools;
-  }
+  // 先尝试带 tools 调用
+  body.tools = tools;
 
-  const res = await fetch(cfg.baseURL + "/chat/completions", {
+  let res = await fetch(cfg.baseURL + "/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
+  // 如果 tools 导致错误（不支持 / 解析失败 / 服务端错误），降级为无 tools 重试
+  if (!res.ok && body.tools) {
     const errText = await res.text();
-    // 如果 tools 不被支持，重试不带 tools
-    if (cfg.provider === "deepseek" && body.tools && (res.status === 400 || res.status === 404)) {
-      delete body.tools;
-      const res2 = await fetch(cfg.baseURL + "/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
-        body: JSON.stringify(body),
-      });
-      if (!res2.ok) return { text: `API Error: ${await res2.text()}` };
-      const data2 = await res2.json();
-      return { text: data2.choices?.[0]?.message?.content || "" };
-    }
-    return { text: `API Error: ${errText}` };
+    console.warn(`[callNonStream] tools 请求失败 (${res.status}), 降级重试:`, errText.slice(0, 200));
+    delete body.tools;
+    res = await fetch(cfg.baseURL + "/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify(body),
+    });
+  }
+
+  if (!res.ok) {
+    return { text: `API Error: ${await res.text()}` };
   }
 
   const data = await res.json();
   const msg = data.choices?.[0]?.message;
   if (!msg) return { text: "" };
 
+  // 工具调用的 JSON 参数可能解析失败，兜底处理
   if (msg.tool_calls?.length > 0) {
-    const calls = msg.tool_calls.map((tc: any) => ({
-      id: tc.id,
-      type: "function" as const,
-      function: { name: tc.function.name, arguments: tc.function.arguments },
-    }));
-    return { text: msg.content || "", toolCalls: calls };
+    try {
+      const calls = msg.tool_calls.map((tc: any) => ({
+        id: tc.id,
+        type: "function" as const,
+        function: { name: tc.function.name, arguments: tc.function.arguments },
+      }));
+      // 尝试验证 arguments 是合法 JSON
+      calls.forEach((c: any) => {
+        if (c.function.arguments) JSON.parse(c.function.arguments);
+      });
+      return { text: msg.content || "", toolCalls: calls };
+    } catch (e) {
+      // 工具参数 JSON 不合法 → 丢弃工具调用，返回纯文本
+      console.warn("[callNonStream] 工具参数 JSON 解析失败，降级为纯文本:", e);
+      return { text: msg.content || "" };
+    }
   }
   return { text: msg.content || "" };
 }
@@ -266,7 +271,27 @@ export async function POST(req: Request) {
   }
 
   let currentMessages = [
-    { role: "system", content: "你是玄言生物科技的 Investor DD Agent（投资人尽调智能体）。回答风格要像CEO路演：简洁、坚定、带数据、承认风险但给出解决路径。可以调用 queryDatabase 查询结构化业务数据（管线、临床、财务、团队、专利、医院、竞品），调用 searchKnowledge 搜索尽调知识库获取详细信息（公司概况、管线地图、临床验证、FDA注册、商业化模型、竞品分析、财务预测、风险应对等）。每次回答尽量标注数据来源。对于不确定的信息，明确说明。请用中文回答。" },
+    { role: "system", content: `你是玄言生物科技的 Investor DD Agent（投资人尽调智能体）。回答风格要像CEO路演：简洁、坚定、带数据、承认风险但给出解决路径。
+
+可以调用 queryDatabase 查询结构化业务数据（管线、临床、财务、团队、专利、医院、竞品），调用 searchKnowledge 搜索尽调知识库获取详细信息（公司概况、管线地图、临床验证、FDA注册、商业化模型、竞品分析、财务预测、风险应对等）。
+
+每次回答尽量标注数据来源。对于不确定的信息，明确说明。请用中文回答。
+
+=== 可视化组件使用指南 ===
+
+用特殊代码块渲染图表，让回答更直观：
+
+• 柱状图 \`\`\`chart-bar [{ "name":"A", "value":100 }] \`\`\` → 收入/管线对比
+• 饼图   \`\`\`chart-pie [{ "name":"A", "value":35 }] \`\`\` → 股权/市场份额
+• 折线图 \`\`\`chart-line [{ "name":"Q1", "收入":500 }] \`\`\` → 趋势/时间序列
+• 雷达图 \`\`\`chart-radar [{ "name":"技术", "评分":9 }] \`\`\` → 多维对比(0-10)
+• 流程图 \`\`\`mermaid graph TD; A-->B; \`\`\` → 管线/流程/架构
+• 时序图 \`\`\`mermaid sequenceDiagram A->>B:请求; \`\`\` → 流程/时间线
+• 表格  标准 Markdown 表格
+• 图片  ![描述](URL)
+
+规则：图表数据须是合法 JSON 数组，name 为分类字段，其余数字为数值。每张图前后用文字说明背景和结论。
+` },
     ...messages.map(toModelMessage),
   ];
 
