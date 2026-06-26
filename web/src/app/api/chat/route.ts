@@ -208,6 +208,45 @@ function toModelMessage(msg: any): any {
 }
 
 // ===================================================
+// AI SDK v6 流式协议格式化
+// ===================================================
+
+function createAIStream(finalStream: AsyncGenerator<string>): ReadableStream {
+  const encoder = new TextEncoder();
+  const textId = crypto.randomUUID();
+
+  return new ReadableStream({
+    async start(controller) {
+      // 发送 text-start
+      const start = JSON.stringify({ type: "text-start", id: textId });
+      controller.enqueue(encoder.encode(`data: ${start}\n\n`));
+
+      // 发送 text-delta 块
+      for await (const chunk of finalStream) {
+        const delta = JSON.stringify({ type: "text-delta", id: textId, delta: chunk });
+        controller.enqueue(encoder.encode(`data: ${delta}\n\n`));
+      }
+
+      // 发送 text-end
+      const end = JSON.stringify({ type: "text-end", id: textId });
+      controller.enqueue(encoder.encode(`data: ${end}\n\n`));
+
+      controller.close();
+    },
+  });
+}
+
+function createAIResponse(stream: ReadableStream): Response {
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
+}
+
+// ===================================================
 // POST 处理主入口
 // ===================================================
 
@@ -236,20 +275,9 @@ export async function POST(req: Request) {
     const { text, toolCalls } = await callNonStream(cfg, { messages: currentMessages, stream: false, max_tokens: 512 });
 
     if (!toolCalls || toolCalls.length === 0) {
-      // 没有工具调用 → 流式输出最终回复
+      // 没有工具调用 → 流式输出最终回复（AI SDK v6 协议）
       const finalStream = streamChat(cfg, { messages: currentMessages, stream: true, max_tokens: 1024 });
-      const encoder = new TextEncoder();
-      const rs = new ReadableStream({
-        async start(controller) {
-          for await (const chunk of finalStream) {
-            controller.enqueue(encoder.encode(chunk));
-          }
-          controller.close();
-        },
-      });
-      return new Response(rs, {
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
+      return createAIResponse(createAIStream(finalStream));
     }
 
     // 执行工具调用
@@ -271,19 +299,8 @@ export async function POST(req: Request) {
     currentMessages.push(...toolResults);
   }
 
-  // 超过 3 轮后的 fallback 流式输出
+  // 超过 3 轮后的 fallback 流式输出（AI SDK v6 协议）
   const finalStream = streamChat(cfg, { messages: currentMessages, stream: true, max_tokens: 1024 });
-  const encoder = new TextEncoder();
-  const rs = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of finalStream) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
-    },
-  });
-  return new Response(rs, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  return createAIResponse(createAIStream(finalStream));
 }
 
